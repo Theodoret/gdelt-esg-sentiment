@@ -14,27 +14,6 @@ import pandas as pd
 
 import config
 
-# Separator used to make missing-day warnings visually prominent in the
-# notebook output.
-_WARN_BAR = "!" * 70
-
-
-def _warn_missing_days(missing_days: list[str]) -> None:
-    """Print a prominent warning listing days with no raw GKG file.
-
-    GDELT has occasional archive gaps (e.g. server outages). When the
-    requested date range includes days for which no raw batch was downloaded,
-    the user must be able to notice the gap so they know the dataset is
-    incomplete.
-    """
-    print(f"\n{_WARN_BAR}")
-    print(f"WARNING: {len(missing_days)} day(s) in the requested date range have no raw GKG file:")
-    for d in missing_days:
-        print(f"  - {d}")
-    print("  These days are MISSING from the dataset (GDELT archive gap or")
-    print("  the batch was skipped during download).")
-    print(f"{_WARN_BAR}\n")
-
 
 def find_raw_gkg_files(glob: str = "*.gkg.csv") -> list[Path]:
     """Return the raw GKG files in ``config.raw_data_dir``, sorted by name."""
@@ -136,7 +115,10 @@ def fetch_raw_gkg(
             disables the filter. Defaults to ``config.date_range``.
 
     Returns:
-        Tuple of (concatenated DataFrame, list of loaded file paths).
+        Tuple of (concatenated DataFrame, list of loaded file paths, list of
+        missing day strings ``YYYY-MM-DD`` in the requested date range that
+        have no raw GKG file). The missing list is empty when the range is
+        fully covered or no date bounds are given.
     """
     raw_files = find_raw_gkg_files(glob)
     if not raw_files:
@@ -161,13 +143,11 @@ def fetch_raw_gkg(
             f"No rows match date_range {date_range} in {len(raw_files)} raw files"
         )
 
-    # Warn about days in the requested range that have no raw file (GDELT
-    # archive gaps or batches skipped during download).
+    # Days in the requested range that have no raw file (GDELT archive gaps
+    # or batches skipped during download), returned to the caller as a list.
     missing = _missing_days(raw_files, start, end)
-    if missing:
-        _warn_missing_days(missing)
 
-    return pd.concat(frames, ignore_index=True), loaded
+    return pd.concat(frames, ignore_index=True), loaded, missing
 
 
 def filter_by_date(
