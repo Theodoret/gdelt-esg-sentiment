@@ -51,8 +51,13 @@ def _parse_date(date_val: object) -> pd.Timestamp | None:
 
 
 def _freq_alias(freq: str) -> str:
-    """Map config aggregation_freq to a pandas offset alias."""
-    return {"1D": "D", "1W": "W", "1M": "ME"}.get(freq, freq)
+    """Map config aggregation_freq to a pandas offset alias.
+
+    ``to_period`` (used below) requires the legacy ``M`` alias for month-end
+    periods; pandas 3.x rejects ``ME`` here (``ME`` is only valid for
+    ``resample``/``Grouper``, not ``to_period``).
+    """
+    return {"1D": "D", "1W": "W", "1M": "M"}.get(freq, freq)
 
 
 def aggregate(
