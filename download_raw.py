@@ -25,6 +25,25 @@ GDELT_BASE_URL = "https://data.gdeltproject.org/gdeltv2"
 # 15-minute GDELT batch interval.
 _BATCH_MINUTES = 15
 
+# Separator used to make missing-batch warnings visually prominent in the
+# notebook output.
+_WARN_BAR = "!" * 70
+
+
+def _warn_missing(timestamp: str, url: str) -> None:
+    """Print a prominent warning that a GDELT batch is unavailable.
+
+    GDELT occasionally has gaps in its archive (e.g. server outages). When a
+    batch is missing we skip it and continue, but the user must be able to
+    notice the gap so they know the resulting dataset is incomplete.
+    """
+    print(f"\n{_WARN_BAR}")
+    print(f"WARNING: GDELT batch not available on the server: {timestamp}")
+    print(f"  URL: {url}")
+    print("  This batch was SKIPPED. The downloaded dataset will have a gap")
+    print("  for this timestamp. Check the GDELT archive if you need this data.")
+    print(f"{_WARN_BAR}\n")
+
 
 def gkg_url(timestamp: str) -> str:
     """Return the download URL for a GKG batch timestamp (YYYYMMDDHHMMSS)."""
@@ -87,6 +106,7 @@ def download_date_range(
     dest_dir: Path | None = None,
     timeout: int = 120,
     force: bool = False,
+    skip_missing: bool = True,
 ) -> list[Path]:
     """Download all GDELT GKG batches between two dates (inclusive).
 
@@ -97,12 +117,16 @@ def download_date_range(
         timeout: HTTP request timeout in seconds.
         force: If True, re-download existing files (overwrite). Defaults to
             False (skip existing).
+        skip_missing: If True (default), skip batches the server does not have
+            (404) with a prominent warning and continue. If False, raise on
+            the first missing batch.
 
     Returns:
         List of paths to the downloaded ``.gkg.csv`` files.
 
     Raises:
-        requests.HTTPError: If any batch is unavailable on the server.
+        requests.HTTPError: If a batch is unavailable and ``skip_missing`` is
+            False.
     """
     if dest_dir is None:
         dest_dir = config.raw_data_dir
@@ -125,7 +149,12 @@ def download_date_range(
         # GDELT publishes one batch per 15 minutes; fetch the last batch of
         # the day (23:45) as the day's representative GKG file.
         ts = day.strftime("%Y%m%d") + "234500"
-        paths.append(download_batch(ts, dest_dir=dest_dir, timeout=timeout, force=force))
+        try:
+            paths.append(download_batch(ts, dest_dir=dest_dir, timeout=timeout, force=force))
+        except requests.HTTPError as exc:
+            if not skip_missing or exc.response is None or exc.response.status_code != 404:
+                raise
+            _warn_missing(ts, gkg_url(ts))
         day += timedelta(days=1)
     return paths
 
@@ -136,6 +165,7 @@ def download_all_batches(
     dest_dir: Path | None = None,
     timeout: int = 120,
     force: bool = False,
+    skip_missing: bool = True,
 ) -> list[Path]:
     """Download ALL 15-minute GDELT GKG batches between two dates (inclusive).
 
@@ -151,12 +181,16 @@ def download_all_batches(
         timeout: HTTP request timeout in seconds.
         force: If True, re-download existing files (overwrite). Defaults to
             False (skip existing).
+        skip_missing: If True (default), skip batches the server does not have
+            (404) with a prominent warning and continue. If False, raise on
+            the first missing batch.
 
     Returns:
         List of paths to the downloaded ``.gkg.csv`` files.
 
     Raises:
-        requests.HTTPError: If any batch is unavailable on the server.
+        requests.HTTPError: If a batch is unavailable and ``skip_missing`` is
+            False.
     """
     if dest_dir is None:
         dest_dir = config.raw_data_dir
@@ -176,7 +210,13 @@ def download_all_batches(
     ts = d_start.replace(hour=0, minute=0, second=0, microsecond=0)
     end_ts = d_end.replace(hour=23, minute=45, second=0, microsecond=0)
     while ts <= end_ts:
-        paths.append(download_batch(ts.strftime("%Y%m%d%H%M%S"), dest_dir=dest_dir, timeout=timeout, force=force))
+        ts_str = ts.strftime("%Y%m%d%H%M%S")
+        try:
+            paths.append(download_batch(ts_str, dest_dir=dest_dir, timeout=timeout, force=force))
+        except requests.HTTPError as exc:
+            if not skip_missing or exc.response is None or exc.response.status_code != 404:
+                raise
+            _warn_missing(ts_str, gkg_url(ts_str))
         ts += timedelta(minutes=_BATCH_MINUTES)
     return paths
 
