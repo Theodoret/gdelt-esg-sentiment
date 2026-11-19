@@ -18,11 +18,59 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 import config
+from geo_attr import COUNTRY_TO_CONTINENT
 
 # Plotly's choropleth uses ISO-3 country codes internally; we pass country
 # names and let Plotly match them. Names not in Plotly's geometry are dropped
 # from the map (they remain in the underlying data).
 _COLOR_SCALE = "RdBu_r"  # red = negative, blue = positive (tone scale)
+
+# Approximate bounding boxes per continent (lon / lat), used to clip the map
+# view so that continents unrelated to the selected countries are removed.
+_CONT_BOUNDS: dict[str, dict[str, tuple[float, float]]] = {
+    "Africa": {"lon": (-20, 56), "lat": (-38, 40)},
+    "Asia": {"lon": (25, 180), "lat": (-12, 80)},
+    "Europe": {"lon": (-28, 60), "lat": (34, 72)},
+    "North America": {"lon": (-170, -50), "lat": (5, 84)},
+    "South America": {"lon": (-84, -32), "lat": (-58, 14)},
+    "Oceania": {"lon": (108, 180), "lat": (-54, -4)},
+}
+
+# If the selected countries span a box wider than this, fall back to the whole
+# globe (treat it as a global / multi-continent view).
+_MAX_GEO_SPAN = (200.0, 130.0)
+
+
+def _geo_clip(countries) -> dict:
+    """Return geo layout ranges that focus the map on the given countries.
+
+    Determines the set of continents implied by ``countries`` (via
+    ``COUNTRY_TO_CONTINENT``) and returns an equirectangular layout whose
+    lon/lat ranges bound the union of those continents. Falls back to an empty
+    dict (full world) when no continent can be inferred or the span is global.
+    """
+    nations = set(countries)
+    continents = {COUNTRY_TO_CONTINENT[c] for c in nations if c in COUNTRY_TO_CONTINENT}
+    if not continents:
+        return {}
+    lon_min = min(_CONT_BOUNDS[c]["lon"][0] for c in continents)
+    lon_max = max(_CONT_BOUNDS[c]["lon"][1] for c in continents)
+    lat_min = min(_CONT_BOUNDS[c]["lat"][0] for c in continents)
+    lat_max = max(_CONT_BOUNDS[c]["lat"][1] for c in continents)
+    if (lon_max - lon_min) > _MAX_GEO_SPAN[0] or (lat_max - lat_min) > _MAX_GEO_SPAN[1]:
+        return {}
+    return {
+        "projection": {"type": "equirectangular"},
+        "lonaxis": {"range": [lon_min, lon_max]},
+        "lataxis": {"range": [lat_min, lat_max]},
+    }
+
+
+def _base_geo(countries) -> dict:
+    """Full geo layout: base styling plus continent clipping for ``countries``."""
+    geo = {"showframe": False, "showcoastlines": True}
+    geo.update(_geo_clip(countries))
+    return geo
 
 
 def _prepare(df: pd.DataFrame) -> pd.DataFrame:
@@ -79,7 +127,7 @@ def build_choropleth(
     )
     fig.update_layout(
         coloraxis_colorbar=dict(title="Mean tone"),
-        geo=dict(showframe=False, showcoastlines=True),
+        geo=_base_geo(data["country"]),
     )
     return fig
 
@@ -113,7 +161,7 @@ def build_date_slider_figure(
     )
     fig.update_layout(
         coloraxis_colorbar=dict(title="Mean tone"),
-        geo=dict(showframe=False, showcoastlines=True),
+        geo=_base_geo(data["country"]),
     )
     return fig
 
@@ -195,7 +243,7 @@ def build_category_selector_figure(
             cmax=5,
             colorbar=dict(title="Mean tone"),
         ),
-        geo=dict(showframe=False, showcoastlines=True),
+        geo=_base_geo(data["country"]),
     )
     return fig
 
@@ -314,7 +362,7 @@ def build_time_series_figure(
             cmax=5,
             colorbar=dict(title="Mean tone"),
         ),
-        geo=dict(showframe=False, showcoastlines=True),
+        geo=_base_geo(data["country"]),
     )
     return fig
 
