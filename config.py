@@ -43,7 +43,20 @@ esg_categories: list[str] = ["Environmental", "Social", "Governance"]
 # Aggregation parameters
 # ---------------------------------------------------------------------------
 # Time aggregation window: "1D" (daily), "1W" (weekly), "1M" (monthly).
-aggregation_freq: str = "1D"
+# Defaults to "1W": weekly buckets collect more articles per country, so the
+# sentiment signal is less noisy than daily and the map reads as a trend
+# rather than strobe-like single-article flicker.
+aggregation_freq: str = "1W"
+
+# ---------------------------------------------------------------------------
+# Map visualization parameters
+# ---------------------------------------------------------------------------
+# Minimum number of articles (n_articles) required for a (date, country)
+# bucket to be colored on the map / shown in the aggregation surface. Buckets
+# below this threshold are considered too noisy to represent sentiment and are
+# hidden. Tune to the coverage in your data; a lone article's tone is rarely
+# a meaningful signal.
+MIN_ARTICLES: int = 3
 
 # ---------------------------------------------------------------------------
 # GDELT schema / column handling

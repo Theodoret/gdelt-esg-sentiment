@@ -73,10 +73,20 @@ def _base_geo(countries) -> dict:
     return geo
 
 
-def _prepare(df: pd.DataFrame) -> pd.DataFrame:
-    """Filter to rows with a valid tone and a map-mappable country."""
+def _prepare(df: pd.DataFrame, min_articles: int | None = None) -> pd.DataFrame:
+    """Filter to rows with a valid tone and a map-mappable country.
+
+    Rows whose bucket holds fewer than ``min_articles`` articles (default
+    ``config.MIN_ARTICLES``) are dropped: with too small a sample the tone
+    mean is dominated by a single article and reads as noise, which makes
+    animated maps flicker. Setting ``min_articles=0`` disables the mask.
+    """
+    if min_articles is None:
+        min_articles = config.MIN_ARTICLES
     out = df.copy()
     out = out[out["tone_mean"].notna()]
+    if min_articles > 0:
+        out = out[out["n_articles"] >= min_articles]
     # Exclude the UNKNOWN bucket and any country Plotly cannot geolocate.
     out = out[out["country"] != config.UNKNOWN_SOURCE]
     return out
@@ -163,6 +173,9 @@ def build_date_slider_figure(
         coloraxis_colorbar=dict(title="Mean tone"),
         geo=_base_geo(data["country"]),
     )
+    # Remove the auto-added play/pause buttons (autoplay) so the map does not
+    # animate on its own; the user steps through frames with the slider.
+    fig.layout.updatemenus = ()
     return fig
 
 
