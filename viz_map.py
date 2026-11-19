@@ -176,12 +176,6 @@ def build_date_slider_figure(
     # Remove the auto-added play/pause buttons (autoplay) so the map does not
     # animate on its own; the user steps through frames with the slider.
     fig.layout.updatemenus = ()
-    # Hide the per-tick date labels and the above-slider "date=..." readout so
-    # the slider shows no timestamp; the thumb position is the only cue.
-    for slider in fig.layout.sliders or []:
-        for step in slider.steps:
-            step.label = ""
-        slider.currentvalue.visible = False
     return fig
 
 
@@ -339,13 +333,11 @@ def build_time_series_figure(
         for idx, cat in enumerate(categories)
     ]
 
-    # Date slider steps. Labels are blank and the current-value readout is
-    # hidden so the slider shows no timestamp until a frame changes; the only
-    # visual cue is the thumb position between ticks.
+    # Date slider steps.
     slider_steps = [
         dict(
             method="animate",
-            label="",
+            label=str(d),
             args=[
                 [str(d)],
                 dict(mode="immediate", frame=dict(duration=500, redraw=True), transition=dict(duration=300)),
@@ -374,7 +366,7 @@ def build_time_series_figure(
                 x=0.1,
                 len=0.9,
                 pad=dict(t=40),
-                currentvalue=dict(visible=False),
+                currentvalue=dict(prefix="Date: ", visible=True),
             )
         ],
         coloraxis=dict(
