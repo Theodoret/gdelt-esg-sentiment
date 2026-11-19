@@ -1,0 +1,29 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---- Virtual environment ----
+.venv/
+venv/
+env/
+
+# ---- Notebook checkpoints ----
+.ipynb_checkpoints/
+
+# ---- IDE / editor ----
+.idea/
+.vscode/
+*.iml
+
+# ---- Project data (non-code; not version-controlled) ----
+data/raw/
+data/processed/
+data/output/
+
+# ---- OS files ----
+.DS_Store
+Thumbs.db
