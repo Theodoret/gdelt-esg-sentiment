@@ -7,11 +7,33 @@ See plan.txt Section 3.1.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
 
 import config
+
+# Separator used to make missing-day warnings visually prominent in the
+# notebook output.
+_WARN_BAR = "!" * 70
+
+
+def _warn_missing_days(missing_days: list[str]) -> None:
+    """Print a prominent warning listing days with no raw GKG file.
+
+    GDELT has occasional archive gaps (e.g. server outages). When the
+    requested date range includes days for which no raw batch was downloaded,
+    the user must be able to notice the gap so they know the dataset is
+    incomplete.
+    """
+    print(f"\n{_WARN_BAR}")
+    print(f"WARNING: {len(missing_days)} day(s) in the requested date range have no raw GKG file:")
+    for d in missing_days:
+        print(f"  - {d}")
+    print("  These days are MISSING from the dataset (GDELT archive gap or")
+    print("  the batch was skipped during download).")
+    print(f"{_WARN_BAR}\n")
 
 
 def find_raw_gkg_files(glob: str = "*.gkg.csv") -> list[Path]:
@@ -60,6 +82,47 @@ def load_raw_gkg(path: Path | None = None, columns: list[str] | None = None) -> 
         )
 
 
+def _missing_days(
+    raw_files: list[Path],
+    start: str | None,
+    end: str | None,
+) -> list[str]:
+    """Return the days in [start, end] that have no raw GKG file.
+
+    GDELT daily batches are named ``<YYYYMMDD>234500.gkg.csv``. Days whose
+    batch file is absent (e.g. archive gap or skipped download) are returned
+    as ``YYYY-MM-DD`` strings. Returns [] when no date bounds are given.
+    """
+    if not start and not end:
+        return []
+
+    def _to_date(s: str) -> datetime:
+        s = s.strip()
+        if s.isdigit() and len(s) == 14:
+            return datetime.strptime(s[:8], "%Y%m%d")
+        return datetime.strptime(s, "%Y-%m-%d")
+
+    d_start = _to_date(start) if start else None
+    d_end = _to_date(end) if end else None
+
+    # Collect the dates covered by the raw files present.
+    have: set[str] = set()
+    for p in raw_files:
+        name = p.stem  # e.g. 20250613234500.gkg.csv -> 20250613234500
+        if len(name) >= 8 and name[:8].isdigit():
+            have.add(name[:8])
+
+    missing: list[str] = []
+    day = d_start or (d_end - timedelta(days=365))
+    while d_end is None or day <= d_end:
+        if day.strftime("%Y%m%d") not in have:
+            missing.append(day.strftime("%Y-%m-%d"))
+        if d_end is None:
+            break
+        day += timedelta(days=1)
+    return missing
+
+
 def fetch_raw_gkg(
     glob: str = "*.gkg.csv",
     date_range: tuple[str | None, str | None] | None = None,
@@ -97,6 +160,12 @@ def fetch_raw_gkg(
         raise ValueError(
             f"No rows match date_range {date_range} in {len(raw_files)} raw files"
         )
+
+    # Warn about days in the requested range that have no raw file (GDELT
+    # archive gaps or batches skipped during download).
+    missing = _missing_days(raw_files, start, end)
+    if missing:
+        _warn_missing_days(missing)
 
     return pd.concat(frames, ignore_index=True), loaded
 
